@@ -168,6 +168,11 @@ body.theme-serene #js-tip{
 
 /* ── TODAY ── */
 .today-hero{display:grid;grid-template-columns:1fr auto;gap:20px;margin-bottom:22px;align-items:start;flex-wrap:wrap;}
+.retro-btn{font-size:10px;font-weight:700;padding:4px 9px;border-radius:6px;border:1px solid var(--border2);background:var(--s2);color:var(--t2);cursor:pointer;transition:all .15s;letter-spacing:.04em;}
+.retro-btn:hover{border-color:var(--accent);color:var(--accent);}
+.retro-btn.active{background:var(--accent);border-color:var(--accent);color:#000;font-weight:800;}
+.retro-banner{background:rgba(108,92,231,.12);border:1px solid rgba(108,92,231,.25);border-radius:10px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:var(--accent);display:none;align-items:center;gap:8px;}
+.retro-banner.show{display:flex;}
 .today-title{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.1;}
 .today-sub{font-size:13px;color:var(--t2);margin-top:5px;}
 
@@ -476,10 +481,21 @@ body.theme-serene #js-tip{
         <div class="today-title" id="t-title"></div>
         <div class="today-sub" id="t-sub"></div>
       </div>
-      <div class="rings-row" id="rings-row"></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+        <div class="rings-row" id="rings-row"></div>
+        <div id="retro-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <span style="font-size:11px;color:var(--t3);letter-spacing:.06em;text-transform:uppercase">Viewing:</span>
+          <div style="display:flex;gap:4px" id="retro-days"></div>
+        </div>
+      </div>
     </div>
     <div id="today-add-bar" style="display:none;margin-bottom:16px">
       <button class="btn btn-p" onclick="openAdd()" style="width:100%;justify-content:center">+ Add Your First Habit</button>
+    </div>
+    <div class="retro-banner" id="retro-banner">
+      <span>📅</span>
+      <span id="retro-banner-text">Viewing a past date — tap any habit to toggle it done for that day.</span>
+      <button class="btn btn-g btn-xs" onclick="setRetroDate(0)" style="margin-left:auto;white-space:nowrap">Back to Today</button>
     </div>
     <div class="habits-list" id="habits-list"></div>
   </div>
@@ -1093,12 +1109,6 @@ window.addEventListener('DOMContentLoaded',()=>{
   const wasCleared=localStorage.getItem('momentum_cleared');
   if(wasCleared){ localStorage.removeItem('momentum_cleared'); }
 
-  const ex=localStorage.getItem('momentum_data');
-  const parsed=ex?JSON.parse(ex):null;
-  // Only seed if no data exists AND user didn't just clear intentionally
-  if(!wasCleared&&(!parsed||!parsed.habits||!parsed.habits.length)){
-    const s=seed(); localStorage.setItem('momentum_data',JSON.stringify(s)); window._D=s;
-  }
   const d=get();
   if(!d.settings.name){
     document.getElementById('ob').style.display='flex';
@@ -1106,6 +1116,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     startApp(d.settings.name);
   }
   document.getElementById('ob-name').addEventListener('keydown',e=>{if(e.key==='Enter')obNext();});
+  checkBackupReminder();
 });
 
 function obNext(){
@@ -1138,7 +1149,8 @@ function setHeader(name){
 // TODAY
 // ════════════════════════════════════════
 function renderToday(){
-  const d=get(); const t=today(); const now=new Date();
+  const d=get(); const t=retroDate(); const offset=window._retroOffset||0;
+  const now=new Date(); now.setDate(now.getDate()-offset);
   const sched=d.habits.filter(h=>isScheduled(h,now)&&h.created<=t);
   const done=sched.filter(h=>d.logs.some(l=>l.habitId===h.id&&l.date===t));
   const pct=sched.length?Math.round(done.length/sched.length*100):0;
@@ -1146,18 +1158,34 @@ function renderToday(){
   // Title
   document.getElementById('t-title').textContent=`${DAY_FULL[now.getDay()]}`;
   const name=d.settings.name;
-  const h2=now.getHours();
-  const g=h2<12?'Good morning':h2<17?'Good afternoon':'Good evening';
-  document.getElementById('t-sub').textContent=`${g}, ${name}. ${sched.length} habit${sched.length!==1?'s':''} scheduled today.`;
+  if(offset===0){
+    const h2=new Date().getHours();
+    const g=h2<12?'Good morning':h2<17?'Good afternoon':'Good evening';
+    document.getElementById('t-sub').textContent=`${g}, ${name}. ${sched.length} habit${sched.length!==1?'s':''} scheduled today.`;
+  } else {
+    const daysAgo=offset===1?'Yesterday':`${offset} days ago`;
+    document.getElementById('t-sub').textContent=`${daysAgo} · ${t} · ${sched.length} habit${sched.length!==1?'s':''} scheduled`;
+  }
 
-  // Rings
+  // Retro banner
+  const banner=document.getElementById('retro-banner');
+  if(offset>0){
+    banner.classList.add('show');
+    document.getElementById('retro-banner-text').textContent=
+      `Viewing ${offset===1?'yesterday':offset+' days ago'} (${t}) — tap any habit to toggle it done for that day.`;
+  } else { banner.classList.remove('show'); }
+
+  // Rings — always show today's real stats
   const week7=avgNDays(7); const week30=avgNDays(30);
   document.getElementById('rings-row').innerHTML=
-    ring(pct,'Today','var(--accent)')+
+    ring(pct,offset===0?'Today':DAY_FULL[now.getDay()],'var(--accent)')+
     ring(week7,'7-Day Avg','var(--green)')+
     ring(week30,'30-Day Avg','var(--cyan)');
 
-  // Habits
+  // Retro day buttons
+  buildRetroDays();
+
+  // Habits list
   const list=document.getElementById('habits-list');
   if(!d.habits.length){
     document.getElementById('today-add-bar').style.display='block';
@@ -1173,7 +1201,7 @@ function renderToday(){
     list.innerHTML=`<div style="text-align:center;padding:60px 20px;color:var(--t3)">
       <div style="font-size:48px;margin-bottom:16px">🎉</div>
       <div style="font-family:'Syne',sans-serif;font-size:18px;color:var(--t2)">Rest day!</div>
-      <div style="font-size:14px;margin-top:8px">No habits scheduled today. Enjoy it.</div>
+      <div style="font-size:14px;margin-top:8px">No habits scheduled ${offset===0?'today':'for this day'}. Enjoy it.</div>
     </div>`;
     return;
   }
@@ -1243,7 +1271,7 @@ function avgNDays(n){
 }
 
 function togHabit(id){
-  const t=today();
+  const t=retroDate();
   const d=get();
   const idx=d.logs.findIndex(l=>l.habitId===id&&l.date===t);
   if(idx>=0){ d.logs.splice(idx,1); save(d); window._D=d; renderToday(); toast('Unchecked'); }
@@ -1251,7 +1279,9 @@ function togHabit(id){
     d.logs.push({habitId:id,date:t,ts:Date.now()}); save(d); window._D=d; renderToday();
     const name=d.settings.name;
     const msgs=MOTIVS(name);
-    toast(d.settings.showMotiv!==false?msgs[Math.floor(Math.random()*msgs.length)]:'✓ Done!');
+    if(window._retroOffset===0)
+      toast(d.settings.showMotiv!==false?msgs[Math.floor(Math.random()*msgs.length)]:'✓ Done!');
+    else toast('✓ Logged for '+t);
   }
 }
 
@@ -1874,6 +1904,73 @@ function toast(msg){
 // MODAL CLOSE
 document.getElementById('h-modal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
 document.getElementById('m-name').addEventListener('keydown',e=>{if(e.key==='Enter')saveHabit();});
+
+// ════════════════════════════════════════
+// RETROACTIVE LOGGING
+// ════════════════════════════════════════
+window._retroOffset = 0;
+
+function retroDate(){
+  const dt=new Date(); dt.setDate(dt.getDate()-(window._retroOffset||0)); return ds(dt);
+}
+
+function setRetroDate(offset){
+  window._retroOffset = offset;
+  renderToday();
+}
+
+function buildRetroDays(){
+  const cont=document.getElementById('retro-days'); if(!cont) return;
+  const DAY_SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const labels=Array.from({length:7},(_,i)=>{
+    if(i===0) return 'Today';
+    if(i===1) return 'Yesterday';
+    const dt=new Date(); dt.setDate(dt.getDate()-i);
+    return DAY_SHORT[dt.getDay()];
+  });
+  cont.innerHTML=labels.map((lbl,i)=>
+    `<button class="retro-btn${(window._retroOffset||0)===i?' active':''}" onclick="setRetroDate(${i})">${lbl}</button>`
+  ).join('');
+}
+
+// ════════════════════════════════════════
+// WEEKLY BACKUP REMINDER
+// ════════════════════════════════════════
+function checkBackupReminder(){
+  const d=get(); if(!d.habits||!d.habits.length) return;
+  const key='momentum_backup_reminded';
+  const last=localStorage.getItem(key);
+  const WEEK=7*24*60*60*1000;
+  if(last && Date.now()-parseInt(last)<WEEK) return;
+  setTimeout(showBackupReminder, 2000);
+}
+
+function showBackupReminder(){
+  const el=document.getElementById('backup-reminder-modal');
+  if(el) el.classList.add('open');
+}
+
+function dismissBackupReminder(goBackup){
+  localStorage.setItem('momentum_backup_reminded', Date.now().toString());
+  const el=document.getElementById('backup-reminder-modal');
+  if(el) el.classList.remove('open');
+  if(goBackup){ setTimeout(()=>goTab('advanced'),200); }
+}
 </script>
+<!-- BACKUP REMINDER MODAL -->
+<div class="modal-overlay" id="backup-reminder-modal">
+  <div class="modal" style="max-width:420px;text-align:center">
+    <div style="font-size:2.8rem;margin-bottom:12px">💾</div>
+    <div class="modal-title" style="font-size:20px;margin-bottom:8px">Time to back up your data</div>
+    <div style="font-size:14px;color:var(--t2);line-height:1.6;margin-bottom:22px">
+      Your habits and history are stored only on this device. A quick export to a file keeps your data safe if you ever clear your browser or switch devices.
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="dismissBackupReminder(true)">💾 Go to Data &amp; Backup</button>
+      <button class="btn btn-g" onclick="dismissBackupReminder(false)">Remind me next week</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
