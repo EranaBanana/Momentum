@@ -82,6 +82,7 @@ body.theme-serene {
   --adim: rgba(201,122,26,0.1);
   --cyan: #2a8fa0;
   --pink: #c0627a;
+  background-color: var(--bg);
 }
 body.theme-serene::before{
   background:
@@ -249,11 +250,6 @@ body.theme-serene #js-tip{
 .hmc.l4{background:var(--accent);box-shadow:0 0 6px var(--glow);}
 
 /* ── PROGRESS BARS ── */
-.pbar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
-.pbar-label{font-size:12px;color:var(--t2);width:120px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pbar-track{flex:1;height:7px;background:var(--s3);border-radius:4px;overflow:hidden;}
-.pbar-fill{height:100%;border-radius:4px;transition:width .6s cubic-bezier(.34,1.56,.64,1);}
-.pbar-pct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);width:36px;text-align:right;flex-shrink:0;}
 
 /* ── WEEKLY GRID ── */
 .wgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:8px;}
@@ -556,10 +552,6 @@ body.theme-serene #js-tip{
         <div class="hm-months" id="hm-months"></div>
         <div class="hm-grid" id="hm-grid"></div>
       </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-h"><span>Habit Performance</span><span style="font-size:10px;font-weight:400;color:var(--t3);text-transform:none;letter-spacing:0">% of scheduled days completed · last 30 days</span></div>
-      <div id="pbar-list"></div>
     </div>
   </div>
 
@@ -1299,7 +1291,6 @@ function renderAnalytics(){
   renderDOW();
   renderMonthly();
   renderHeatmap();
-  renderPBars();
 }
 
 function renderStatCards(){
@@ -1586,18 +1577,6 @@ function renderHeatmap(){
     el.title=`${c.s}: ${c.cnt} habit${c.cnt!==1?'s':''} done`;
     hm.appendChild(el);
   });
-}
-
-function renderPBars(){
-  const d=get();
-  const items=d.habits.map(h=>({name:h.name,rate:habitRate30(h.id),color:h.color})).sort((a,b)=>b.rate-a.rate);
-  document.getElementById('pbar-list').innerHTML=items.map(h=>`
-    <div class="pbar-row">
-      <div class="pbar-label" title="${h.name}">${h.name}</div>
-      <div class="pbar-track"><div class="pbar-fill" style="width:${h.rate}%;background:${h.color}"></div></div>
-      <div class="pbar-pct">${h.rate}%</div>
-    </div>
-  `).join('');
 }
 
 // ════════════════════════════════════════
@@ -1938,39 +1917,14 @@ function buildRetroDays(){
 // ════════════════════════════════════════
 function checkBackupReminder(){
   const d=get(); if(!d.habits||!d.habits.length) return;
-  const key='momentum_backup_reminded';
-  const last=localStorage.getItem(key);
   const WEEK=7*24*60*60*1000;
-  if(last && Date.now()-parseInt(last)<WEEK) return;
-  setTimeout(showBackupReminder, 2000);
-}
-
-function showBackupReminder(){
-  const el=document.getElementById('backup-reminder-modal');
-  if(el) el.classList.add('open');
-}
-
-function dismissBackupReminder(goBackup){
-  localStorage.setItem('momentum_backup_reminded', Date.now().toString());
-  const el=document.getElementById('backup-reminder-modal');
-  if(el) el.classList.remove('open');
-  if(goBackup){ setTimeout(()=>goTab('advanced'),200); }
+  const last=d.settings.lastBackupReminded||0;
+  if(Date.now()-last<WEEK) return;
+  setTimeout(()=>toast('💾 Time to back up your data — go to Data & Backup'),2000);
+  d.settings.lastBackupReminded=Date.now();
+  save(d);
 }
 </script>
-<!-- BACKUP REMINDER MODAL -->
-<div class="modal-overlay" id="backup-reminder-modal">
-  <div class="modal" style="max-width:420px;text-align:center">
-    <div style="font-size:2.8rem;margin-bottom:12px">💾</div>
-    <div class="modal-title" style="font-size:20px;margin-bottom:8px">Time to back up your data</div>
-    <div style="font-size:14px;color:var(--t2);line-height:1.6;margin-bottom:22px">
-      Your habits and history are stored only on this device. A quick export to a file keeps your data safe if you ever clear your browser or switch devices.
-    </div>
-    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <button class="btn btn-p" onclick="dismissBackupReminder(true)">💾 Go to Data &amp; Backup</button>
-      <button class="btn btn-g" onclick="dismissBackupReminder(false)">Remind me next week</button>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
