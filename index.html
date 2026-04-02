@@ -1746,7 +1746,7 @@ function saveHabit(){
       d.habits.push({id:'h_'+Date.now(),name,category:document.getElementById('m-cat').value,days:[..._selDays],color,why:document.getElementById('m-why').value.trim(),created:today()});
     }
   });
-  closeModal(); renderToday();
+  closeModal(); renderToday(); renderManage();
   toast(editId?'Habit updated!':'Habit added! 🚀');
 }
 
