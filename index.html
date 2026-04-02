@@ -1866,6 +1866,7 @@ function goTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('sec-'+name)?.classList.add('active');
   document.getElementById('tab-'+name)?.classList.add('active');
+  if(name==='today') renderToday();
   if(name==='analytics') renderAnalytics();
   if(name==='history') renderHistory();
   if(name==='habits') renderManage();
